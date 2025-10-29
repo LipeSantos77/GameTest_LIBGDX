@@ -1,0 +1,6 @@
+.gitkeep
+background.png
+bot_bike.jpeg
+corridasemfim.mp3
+player_bike.png
+player_bike2.png
