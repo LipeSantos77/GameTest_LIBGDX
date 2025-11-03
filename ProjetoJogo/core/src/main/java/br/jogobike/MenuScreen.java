@@ -11,16 +11,24 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.Animation;
-import com.badlogic.gdx.utils.viewport.FitViewport; // Mantendo FitViewport
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.math.MathUtils;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
 public class MenuScreen implements Screen {
     private final MainGame game;
     private final OrthographicCamera camera;
-    private final FitViewport viewport; // FitViewport para manter a proporção 1:1 (800x800) e criar as barras pretas
+    private final FitViewport viewport;
     private BitmapFont titleFont;
     private BitmapFont menuFont;
     private BitmapFont instructionFont;
     private final GlyphLayout layout;
+
+    private ShapeRenderer shapeRenderer;
 
     // Texturas e animações
     private Texture background;
@@ -32,48 +40,76 @@ public class MenuScreen implements Screen {
     private float pulseTime = 0;
     private float bikeY = 0;
     private boolean bikeMovingUp = true;
+    // --- MUDANÇA (Request 3): Rotação da bike ---
+    private float bikeAngle = 0;
 
-    // DEFINIÇÕES IGUAIS A GAMESCREEN
-    private static final int VIRTUAL_WIDTH = 800;
-    private static final int VIRTUAL_HEIGHT = 800;
+    // Efeito Parallax
+    private float backgroundOffsetX = 0f;
+    private float parallaxSpeed = 60f;
+
+    // Sistema de vento
+    private List<MenuWindLine> windLines;
+    private Random random;
+
+    // Inner class para o efeito de vento
+    private class MenuWindLine {
+        float x, y, speed, length;
+        float alpha;
+
+        public MenuWindLine(float y) {
+            this.y = y;
+            // --- MUDANÇA (Request 3): Mais rápido e dinâmico ---
+            this.speed = MathUtils.random(200f, 500f);
+            this.length = MathUtils.random(70f, 200f);
+            this.x = MathUtils.random(-length, MainGame.VIRTUAL_WIDTH);
+            this.alpha = MathUtils.random(0.1f, 0.3f); // Mais sutil
+        }
+
+        public void update(float delta) {
+            x += speed * delta;
+            if (x > MainGame.VIRTUAL_WIDTH) {
+                x = -length;
+                y = random.nextFloat() * MainGame.VIRTUAL_HEIGHT;
+            }
+        }
+    }
+
 
     public MenuScreen(MainGame game) {
         this.game = game;
         camera = new OrthographicCamera();
-        // Usando FitViewport com a mesma resolução de GameScreen
-        viewport = new FitViewport(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, camera);
+        viewport = new FitViewport(MainGame.VIRTUAL_WIDTH, MainGame.VIRTUAL_HEIGHT, camera);
         layout = new GlyphLayout();
+
+        shapeRenderer = new ShapeRenderer();
+        random = new Random();
+        windLines = new ArrayList<>();
+        for (int i = 0; i < 50; i++) {
+            windLines.add(new MenuWindLine(random.nextFloat() * MainGame.VIRTUAL_HEIGHT));
+        }
 
         loadResources();
         createFonts();
-
-        // Garantir que a música está tocando no menu
-        if (game.backgroundMusic != null && !game.backgroundMusic.isPlaying()) {
-            game.backgroundMusic.play();
-        }
+        game.playBackgroundMusic();
     }
 
     private void loadResources() {
         try {
-            // Carregar texturas
             background = new Texture(Gdx.files.internal("background.png"));
             bikeTexture = new Texture(Gdx.files.internal("player_bike.png"));
 
-            // Criar animação simples da bike (pulsação)
             TextureRegion[] frames = new TextureRegion[1];
             frames[0] = new TextureRegion(bikeTexture);
             bikeAnimation = new Animation<>(0.1f, frames);
 
         } catch (Exception e) {
             Gdx.app.error("MenuScreen", "Erro ao carregar texturas: " + e.getMessage());
-            // Criar placeholders se necessário
-            background = createPlaceholderTexture(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, new Color(0.2f, 0.6f, 0.8f, 1));
+            background = createPlaceholderTexture((int)MainGame.VIRTUAL_WIDTH, (int)MainGame.VIRTUAL_HEIGHT, new Color(0.2f, 0.6f, 0.8f, 1));
             bikeTexture = createPlaceholderTexture(100, 120, Color.ORANGE);
         }
     }
 
     private void createFonts() {
-        // Usar fontes padrão do LibGDX com estilização
         titleFont = new BitmapFont();
         titleFont.getData().setScale(2.5f);
         titleFont.setColor(new Color(1, 0.8f, 0, 1));
@@ -88,58 +124,113 @@ public class MenuScreen implements Screen {
     }
 
     private Texture createPlaceholderTexture(int width, int height, Color color) {
+        if (game.placeholderTexture != null) {
+            return game.placeholderTexture;
+        }
+
         com.badlogic.gdx.graphics.Pixmap pixmap = new com.badlogic.gdx.graphics.Pixmap(width, height, com.badlogic.gdx.graphics.Pixmap.Format.RGBA8888);
         pixmap.setColor(color);
         pixmap.fill();
         Texture texture = new Texture(pixmap);
         pixmap.dispose();
+
+        game.placeholderTexture = texture;
         return texture;
+    }
+
+    private void update(float delta) {
+        stateTime += delta;
+        pulseTime += delta;
+
+        // Animação de flutuação da bike
+        updateBikeAnimation(delta);
+
+        // Animação do parallax
+        backgroundOffsetX -= parallaxSpeed * delta;
+        if (backgroundOffsetX < -MainGame.VIRTUAL_WIDTH) {
+            backgroundOffsetX += MainGame.VIRTUAL_WIDTH;
+        }
+
+        // Animação das linhas de vento
+        for (MenuWindLine line : windLines) {
+            line.update(delta);
+        }
     }
 
     @Override
     public void render(float delta) {
-        // Atualizar animações
-        stateTime += delta;
-        pulseTime += delta;
-        updateBikeAnimation(delta);
+        // --- LÓGICA ---
+        update(delta);
 
-        // Limpar tela (a cor é o que aparece nas barras pretas)
-        Gdx.gl.glClearColor(0.1f, 0.3f, 0.5f, 1);
+        // --- DESENHO ---
+        Gdx.gl.glClearColor(0.1f, 0.1f, 0.2f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        // Aplicar viewport e atualizar câmera
         viewport.apply();
         camera.update();
+
+        // Desenhar Parallax (Batch)
         game.batch.setProjectionMatrix(camera.combined);
-
-        // Desenhar cena
         game.batch.begin();
+        float x1 = backgroundOffsetX;
+        float x2 = backgroundOffsetX + MainGame.VIRTUAL_WIDTH;
+        float x3 = backgroundOffsetX - MainGame.VIRTUAL_WIDTH;
+        game.batch.draw(background, x1, 0, MainGame.VIRTUAL_WIDTH, MainGame.VIRTUAL_HEIGHT);
+        game.batch.draw(background, x2, 0, MainGame.VIRTUAL_WIDTH, MainGame.VIRTUAL_HEIGHT);
+        game.batch.draw(background, x3, 0, MainGame.VIRTUAL_WIDTH, MainGame.VIRTUAL_HEIGHT);
+        game.batch.end();
 
-        // Fundo (desenhado na resolução virtual 800x800)
-        game.batch.draw(background, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        // Desenhar Efeitos (ShapeRenderer)
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Efeito de vento
+        drawWindLines(shapeRenderer);
+
+        // Efeito de glow no título
+        float pulse = (float) (Math.sin(pulseTime * 3) * 0.1f + 0.9f);
+        float titleY = MainGame.VIRTUAL_HEIGHT - 100 - 30;
+        float titlePulseWidth = 350 * pulse;
+        shapeRenderer.setColor(1, 0.8f + pulse * 0.2f, 0.2f, 0.2f * pulse);
+        shapeRenderer.rect(MainGame.VIRTUAL_WIDTH / 2f - titlePulseWidth / 2f, titleY, titlePulseWidth, 4f);
+
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+
+
+        // Desenhar Cena (Batch)
+        game.batch.setProjectionMatrix(camera.combined);
+        game.batch.begin();
 
         // Overlay escuro para melhor contraste
         game.batch.setColor(0, 0, 0, 0.3f);
-        game.batch.draw(createPlaceholderTexture(1, 1, Color.BLACK), 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        game.batch.draw(createPlaceholderTexture(1, 1, Color.BLACK), 0, 0, MainGame.VIRTUAL_WIDTH, MainGame.VIRTUAL_HEIGHT);
         game.batch.setColor(Color.WHITE);
 
         // Título principal com efeito de brilho
-        float pulse = (float) (Math.sin(pulseTime * 3) * 0.1f + 0.9f);
         titleFont.setColor(1, 0.8f + pulse * 0.2f, 0.2f, 1);
-
         String title = "EXTREME BIKE RACE";
         layout.setText(titleFont, title);
         titleFont.draw(game.batch, title,
-            (VIRTUAL_WIDTH - layout.width) / 2,
-            VIRTUAL_HEIGHT - 100);
+            (MainGame.VIRTUAL_WIDTH - layout.width) / 2,
+            MainGame.VIRTUAL_HEIGHT - 100);
 
         // Bike animada
         TextureRegion currentFrame = bikeAnimation.getKeyFrame(stateTime, true);
-        float bikeX = VIRTUAL_WIDTH / 2f - 50f;
-        game.batch.draw(currentFrame, bikeX, 250 + bikeY, 100, 120);
+        float bikeX = MainGame.VIRTUAL_WIDTH / 2f - 50f;
+        float bikeW = 100f;
+        float bikeH = 120f;
 
-        // Efeito de movimento atrás da bike
-        drawSpeedLines(game.batch, bikeX, 250 + bikeY);
+        // --- MUDANÇA (Request 3): Desenhar com rotação ---
+        game.batch.draw(currentFrame,
+            bikeX, 250 + bikeY,             // Posição
+            bikeW / 2f, bikeH / 2f,         // Origem (centro)
+            bikeW, bikeH,                   // Tamanho
+            1f, 1f,                         // Escala
+            bikeAngle);                     // Rotação
 
         // Menu de opções
         String startText = "> INICIAR CORRIDA <";
@@ -150,23 +241,10 @@ public class MenuScreen implements Screen {
         menuFont.setColor(1, textPulse, textPulse, 1);
 
         menuFont.draw(game.batch, startText,
-            (VIRTUAL_WIDTH - layout.width) / 2,
+            (MainGame.VIRTUAL_WIDTH - layout.width) / 2,
             180);
 
-        // Instruções de controle
-        instructionFont.setColor(0.8f, 0.8f, 0.8f, 1);
 
-        String controls1 = "CONTROLES:";
-        layout.setText(instructionFont, controls1);
-        instructionFont.draw(game.batch, controls1,
-            (VIRTUAL_WIDTH - layout.width) / 2,
-            140);
-
-        String controls2 = "↑ ACELERAR   ← → MOVER   ↓ FREAR";
-        layout.setText(instructionFont, controls2);
-        instructionFont.draw(game.batch, controls2,
-            (VIRTUAL_WIDTH - layout.width) / 2,
-            110);
 
         String enterText = "PRESSIONE [ENTER] PARA COMEÇAR!";
         layout.setText(instructionFont, enterText);
@@ -175,7 +253,7 @@ public class MenuScreen implements Screen {
         float enterAlpha = (float) (Math.sin(pulseTime * 6) * 0.5f + 0.5f);
         instructionFont.setColor(1, 1, 1, enterAlpha);
         instructionFont.draw(game.batch, enterText,
-            (VIRTUAL_WIDTH - layout.width) / 2,
+            (MainGame.VIRTUAL_WIDTH - layout.width) / 2,
             70);
 
         // Rodapé
@@ -183,20 +261,21 @@ public class MenuScreen implements Screen {
         String footer = "Desvie dos obstáculos e mantenha sua velocidade!";
         layout.setText(instructionFont, footer);
         instructionFont.draw(game.batch, footer,
-            (VIRTUAL_WIDTH - layout.width) / 2,
+            (MainGame.VIRTUAL_WIDTH - layout.width) / 2,
             30);
 
         game.batch.end();
 
         // Verificar input
         if (Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.ENTER)) {
-            game.setScreen(new GameScreen(game, 1));
+            GameScreen gameScreen = new GameScreen(game, 1);
+            game.setScreen(gameScreen);
             dispose();
         }
     }
 
+    // --- MUDANÇA (Request 3): Calcular rotação ---
     private void updateBikeAnimation(float delta) {
-        // Animação de flutuação da bike
         if (bikeMovingUp) {
             bikeY += 20 * delta;
             if (bikeY > 5) bikeMovingUp = false;
@@ -204,26 +283,19 @@ public class MenuScreen implements Screen {
             bikeY -= 20 * delta;
             if (bikeY < -5) bikeMovingUp = true;
         }
+        // A bikeY vai de -5 a 5. O ângulo irá de -2.5° a 2.5°
+        bikeAngle = bikeY * 0.5f;
     }
 
-    private void drawSpeedLines(SpriteBatch batch, float bikeX, float bikeY) {
-        // Desenhar linhas de velocidade atrás da bike
-        batch.setColor(1, 1, 1, 0.4f);
-
-        float time = stateTime * 10f;
-        for (int i = 0; i < 8; i++) {
-            float offset = (time + i * 0.5f) % 2f;
-            float x = bikeX - 60 - offset * 40;
-            float height = 10 + i * 3;
-            batch.draw(createPlaceholderTexture(1, 1, Color.WHITE),
-                x, bikeY + 30 + i * 8, 15, height);
+    private void drawWindLines(ShapeRenderer renderer) {
+        for (MenuWindLine line : windLines) {
+            renderer.setColor(1, 1, 1, line.alpha);
+            renderer.rectLine(line.x, line.y, line.x + line.length, line.y, 2.5f);
         }
-        batch.setColor(Color.WHITE);
     }
 
     @Override
     public void resize(int width, int height) {
-        // Atualiza o viewport para o novo tamanho de tela, mantendo a proporção 1:1
         viewport.update(width, height, true);
         camera.position.set(camera.viewportWidth / 2, camera.viewportHeight / 2, 0);
     }
@@ -235,14 +307,12 @@ public class MenuScreen implements Screen {
         if (instructionFont != null) instructionFont.dispose();
         if (background != null) background.dispose();
         if (bikeTexture != null) bikeTexture.dispose();
+        if (shapeRenderer != null) shapeRenderer.dispose();
     }
 
     @Override
     public void show() {
-        // Quando a tela do menu é mostrada, garantir que a música está tocando
-        if (game.backgroundMusic != null && !game.backgroundMusic.isPlaying()) {
-            game.backgroundMusic.play();
-        }
+        game.playBackgroundMusic();
     }
 
     @Override public void hide() {}

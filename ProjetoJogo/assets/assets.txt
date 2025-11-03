@@ -2,6 +2,10 @@
 background.png
 bot_bike.jpeg
 corridasemfim.mp3
+heart.png
+pause.png
 player_bike.png
 player_bike2.png
+pontos.png
 tronco.png
+velocimetro.png

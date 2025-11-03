@@ -9,10 +9,15 @@ import java.util.Random;
 public class BotLog {
     public Texture texture;
     public Rectangle rect;
-    
+
     private float speedOffset;
     private Random random;
-    
+
+    // --- MUDANÇA (Request 1): Variáveis de Fade ---
+    private float alpha = 1.0f;
+    private boolean isFadingOut = false;
+    private final float FADE_SPEED = 3.0f; // ~0.33s para sumir
+
     // Constantes
     private static final float BASE_SPEED = 200f;
     private static final float MIN_SPEED_OFFSET = -80f;
@@ -21,7 +26,7 @@ public class BotLog {
     private static final float DEFAULT_HEIGHT = 75f;
     private static final float COLLISION_WIDTH = 40f;
     private static final float COLLISION_HEIGHT = 40f;
-    
+
     // Offset para centralizar a área de colisão
     private final float collisionOffsetX;
     private final float collisionOffsetY;
@@ -40,7 +45,7 @@ public class BotLog {
     // Construtor com caminho de arquivo
     public BotLog(String texturePath, float x, float y) {
         this.random = new Random();
-        
+
         try {
             this.texture = new Texture(Gdx.files.internal(texturePath));
             Gdx.app.log("BotLog", "Textura carregada: " + texturePath);
@@ -48,7 +53,7 @@ public class BotLog {
             Gdx.app.error("BotLog", "Erro ao carregar: " + texturePath + ", usando fallback");
             this.texture = createPlaceholderTexture();
         }
-        
+
         this.collisionOffsetX = (DEFAULT_WIDTH - COLLISION_WIDTH) / 2f;
         this.collisionOffsetY = (DEFAULT_HEIGHT - COLLISION_HEIGHT) / 2f;
         this.rect = new Rectangle(x + collisionOffsetX, y + collisionOffsetY, COLLISION_WIDTH, COLLISION_HEIGHT);
@@ -66,16 +71,37 @@ public class BotLog {
         Gdx.app.log("BotLog", "Criado com placeholder");
     }
 
-    public void update(float delta, float playerSpeedX, float avalancheWidth, float virtualWidth) {
-        float speed = BASE_SPEED + speedOffset + (Math.abs(playerSpeedX) * 0.5f);
+    /**
+     * Atualiza a lógica do Bot.
+     * @return true se o bot foi "desviado" (saiu da tela e respawnou), false caso contrário.
+     */
+    public boolean update(float delta, float playerSpeedX, float avalancheWidth, float virtualWidth, float difficultyScalar) {
+
+        // --- MUDANÇA (Request 1): Lógica de Fade Out ---
+        if (isFadingOut) {
+            alpha -= FADE_SPEED * delta;
+            if (alpha <= 0) {
+                respawn(virtualWidth, 50, 600);
+                isFadingOut = false;
+                alpha = 1.0f;
+                return true; // Avisa que foi desviado (respawnou)
+            }
+            return false; // Ainda sumindo, mas não respawnou
+        }
+        // ----------------------------------------------
+
+        float scaledBaseSpeed = BASE_SPEED * difficultyScalar;
+        float speed = scaledBaseSpeed + speedOffset + (Math.abs(playerSpeedX) * 0.7f);
+
         float currentX = getX();
         float newX = currentX - speed * delta;
-        
+
         updatePosition(newX, getY());
 
         if (newX + DEFAULT_WIDTH < avalancheWidth) {
-            respawn(virtualWidth, 50, 600);
+            isFadingOut = true; // Inicia o fade
         }
+        return false; // Ainda não foi desviado
     }
 
     public void updatePosition(float x, float y) {
@@ -94,30 +120,38 @@ public class BotLog {
     }
 
     // Getters
-    public float getX() { 
-        return rect.x - collisionOffsetX; 
+    public float getX() {
+        return rect.x - collisionOffsetX;
     }
-    
-    public float getY() { 
-        return rect.y - collisionOffsetY; 
+
+    public float getY() {
+        return rect.y - collisionOffsetY;
     }
-    
-    public float getWidth() { 
-        return DEFAULT_WIDTH; 
+
+    public float getWidth() {
+        return DEFAULT_WIDTH;
     }
-    
-    public float getHeight() { 
-        return DEFAULT_HEIGHT; 
+
+    public float getHeight() {
+        return DEFAULT_HEIGHT;
+    }
+
+    // --- MUDANÇA (Request 1): Getter para o alpha ---
+    public float getAlpha() {
+        return Math.max(0, alpha); // Garante que não seja negativo
     }
 
     private Texture createPlaceholderTexture() {
+        if (MainGame.placeholderTexture != null) {
+            return MainGame.placeholderTexture;
+        }
+
         com.badlogic.gdx.graphics.Pixmap pixmap = new com.badlogic.gdx.graphics.Pixmap(
-            (int)DEFAULT_WIDTH, (int)DEFAULT_HEIGHT, 
+            (int)DEFAULT_WIDTH, (int)DEFAULT_HEIGHT,
             com.badlogic.gdx.graphics.Pixmap.Format.RGBA8888
         );
         pixmap.setColor(0.65f, 0.45f, 0.25f, 1f); // Cor marrom
         pixmap.fill();
-        // Adicionar detalhes para parecer um tronco
         pixmap.setColor(0.55f, 0.35f, 0.15f, 1f); // Marrom mais escuro
         for (int i = 0; i < DEFAULT_WIDTH; i += 10) {
             pixmap.drawLine(i, 0, i, (int)DEFAULT_HEIGHT);
@@ -129,8 +163,10 @@ public class BotLog {
     }
 
     public void dispose() {
-        if (texture != null) {
+        // Não dispor textura se for a placeholder compartilhada
+        if (texture != null && texture != MainGame.placeholderTexture) {
             texture.dispose();
+            // --- CORREÇÃO APLICADA AQUI ---
             Gdx.app.log("BotLog", "Textura disposada");
         }
     }
