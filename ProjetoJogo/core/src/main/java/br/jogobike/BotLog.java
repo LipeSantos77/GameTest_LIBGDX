@@ -83,7 +83,6 @@ public class BotLog {
             }
             return false; 
         }
-        // ----------------------------------------------
 
         float scaledBaseSpeed = BASE_SPEED * difficultyScalar;
         float speed = scaledBaseSpeed + speedOffset + (Math.abs(playerSpeedX) * 0.7f);
@@ -170,3 +169,4 @@ public class BotLog {
         }
     }
 }
+
