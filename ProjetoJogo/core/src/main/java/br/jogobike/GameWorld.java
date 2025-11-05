@@ -245,7 +245,6 @@ public class GameWorld {
                 r.y + ROCK_COLLISION_OFFSET_Y
             );
 
-            // Fora da tela? remover
             if (r.x + r.width < -50) {
                 rocks.remove(i);
                 continue;
