@@ -12,8 +12,7 @@ public class GameScreen implements Screen {
 
     public GameScreen(MainGame game, int level) {
         this.game = game;
-        // O GameWorld agora é criado com o nível (1 ou 2)
-        this.world = new GameWorld(game, level);
+        this.world = new GameWorld(game);
         this.renderer = new GameRenderer(game, world);
     }
 
@@ -27,25 +26,17 @@ public class GameScreen implements Screen {
             world.update(delta);
         }
 
-        // (O GameRenderer vai cuidar da cor do fundo na próxima etapa)
+        // --- DESENHO (VIEW) ---
         Gdx.gl.glClearColor(0.1f, 0.1f, 0.2f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         renderer.render(delta);
 
-        // 1. VERIFICA SE COMPLETOU A FASE 1
-        if (world.isLevelComplete()) {
-            Gdx.app.log("GameScreen", "Nível 1 Completo! Carregando Nível 2...");
-            game.setScreen(new GameScreen(game, 2)); // Inicia a FASE 2!
-            dispose(); // Limpa os recursos da Fase 1
-            return; // Interrompe a renderização deste quadro
-        }
-
-        // 2. VERIFICA GAME OVER
+        // --- VERIFICA GAME OVER ---
         if (world.isGameOver()) {
             Gdx.app.log("GameScreen", "Game Over! Pontos finais: " + world.getPontos());
             game.setScreen(new MenuScreen(game));
-            dispose(); // Limpa os recursos do jogo
+            // dispose() é chamado automaticamente pela MainGame quando setScreen é usado
         }
     }
 
@@ -74,7 +65,6 @@ public class GameScreen implements Screen {
         }
     }
 
-
     @Override
     public void resize(int width, int height) {
         renderer.resize(width, height);
@@ -82,7 +72,8 @@ public class GameScreen implements Screen {
 
     @Override
     public void dispose() {
-
+        // Ocultado o dispose individual pois o setScreen fará isso
+        // Apenas para garantir, chamamos o dispose do renderer e world
         renderer.dispose();
         world.dispose();
     }
@@ -94,6 +85,7 @@ public class GameScreen implements Screen {
 
     @Override
     public void hide() {
+        // Não é necessário pausar a música aqui, pois MenuScreen vai dar play
     }
 
     @Override public void pause() {
@@ -103,4 +95,3 @@ public class GameScreen implements Screen {
         // Não despausa automaticamente, o jogador decide
     }
 }
-
