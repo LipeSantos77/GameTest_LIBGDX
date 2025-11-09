@@ -13,10 +13,10 @@ public class BotLog {
     private float speedOffset;
     private Random random;
 
-
+    // --- MUDANÇA (Request 1): Variáveis de Fade ---
     private float alpha = 1.0f;
     private boolean isFadingOut = false;
-    private final float FADE_SPEED = 3.0f;
+    private final float FADE_SPEED = 3.0f; // ~0.33s para sumir
 
     // Constantes
     private static final float BASE_SPEED = 200f;
@@ -71,18 +71,24 @@ public class BotLog {
         Gdx.app.log("BotLog", "Criado com placeholder");
     }
 
-
+    /**
+     * Atualiza a lógica do Bot.
+     * @return true se o bot foi "desviado" (saiu da tela e respawnou), false caso contrário.
+     */
     public boolean update(float delta, float playerSpeedX, float avalancheWidth, float virtualWidth, float difficultyScalar) {
 
+        // --- MUDANÇA (Request 1): Lógica de Fade Out ---
         if (isFadingOut) {
             alpha -= FADE_SPEED * delta;
             if (alpha <= 0) {
+                respawn(virtualWidth, 50, 600);
                 isFadingOut = false;
                 alpha = 1.0f;
-                return true;
+                return true; // Avisa que foi desviado (respawnou)
             }
-            return false; 
+            return false; // Ainda sumindo, mas não respawnou
         }
+        // ----------------------------------------------
 
         float scaledBaseSpeed = BASE_SPEED * difficultyScalar;
         float speed = scaledBaseSpeed + speedOffset + (Math.abs(playerSpeedX) * 0.7f);
@@ -93,31 +99,24 @@ public class BotLog {
         updatePosition(newX, getY());
 
         if (newX + DEFAULT_WIDTH < avalancheWidth) {
-            isFadingOut = true; 
+            isFadingOut = true; // Inicia o fade
         }
-        return false;
+        return false; // Ainda não foi desviado
     }
 
     public void updatePosition(float x, float y) {
         rect.setPosition(x + collisionOffsetX, y + collisionOffsetY);
     }
 
-
-    public void respawn(float virtualWidth, float minSpawnDistance, float maxSpawnDistance, float trackBottom, float trackTop) {
+    public void respawn(float virtualWidth, float minSpawnDistance, float maxSpawnDistance) {
         float newX = virtualWidth + MathUtils.random(minSpawnDistance, maxSpawnDistance);
-        float newY = getRandomPositionInTrack(trackBottom, trackTop);
+        float newY = getRandomPositionInTrack(275f, 500f);
         this.speedOffset = MathUtils.random(MIN_SPEED_OFFSET, MAX_SPEED_OFFSET);
         updatePosition(newX, newY);
     }
 
     private float getRandomPositionInTrack(float trackBottom, float trackTop) {
-        float effectiveTrackTop = trackTop - DEFAULT_HEIGHT;
-
-        if (effectiveTrackTop <= trackBottom) {
-            return trackBottom;
-        }
-
-        return MathUtils.random(trackBottom, effectiveTrackTop);
+        return trackBottom + (random.nextFloat() * (trackTop - trackBottom - DEFAULT_HEIGHT));
     }
 
     // Getters
@@ -137,8 +136,9 @@ public class BotLog {
         return DEFAULT_HEIGHT;
     }
 
+    // --- MUDANÇA (Request 1): Getter para o alpha ---
     public float getAlpha() {
-        return Math.max(0, alpha); 
+        return Math.max(0, alpha); // Garante que não seja negativo
     }
 
     private Texture createPlaceholderTexture() {
@@ -150,9 +150,9 @@ public class BotLog {
             (int)DEFAULT_WIDTH, (int)DEFAULT_HEIGHT,
             com.badlogic.gdx.graphics.Pixmap.Format.RGBA8888
         );
-        pixmap.setColor(0.65f, 0.45f, 0.25f, 1f); 
+        pixmap.setColor(0.65f, 0.45f, 0.25f, 1f); // Cor marrom
         pixmap.fill();
-        pixmap.setColor(0.55f, 0.35f, 0.15f, 1f); 
+        pixmap.setColor(0.55f, 0.35f, 0.15f, 1f); // Marrom mais escuro
         for (int i = 0; i < DEFAULT_WIDTH; i += 10) {
             pixmap.drawLine(i, 0, i, (int)DEFAULT_HEIGHT);
         }
@@ -163,10 +163,11 @@ public class BotLog {
     }
 
     public void dispose() {
+        // Não dispor textura se for a placeholder compartilhada
         if (texture != null && texture != MainGame.placeholderTexture) {
             texture.dispose();
+            // --- CORREÇÃO APLICADA AQUI ---
             Gdx.app.log("BotLog", "Textura disposada");
         }
     }
 }
-
