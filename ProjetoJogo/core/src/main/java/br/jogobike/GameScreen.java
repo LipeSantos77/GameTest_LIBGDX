@@ -1,3 +1,4 @@
+
 package br.jogobike;
 
 import com.badlogic.gdx.Gdx;
@@ -10,9 +11,11 @@ public class GameScreen implements Screen {
     private GameWorld world;
     private GameRenderer renderer;
 
+    // --- MUDANÇA: Construtor agora passa 'level' para o GameWorld ---
     public GameScreen(MainGame game, int level) {
         this.game = game;
-        this.world = new GameWorld(game);
+        // O GameWorld agora é criado com o nível (1 ou 2)
+        this.world = new GameWorld(game, level);
         this.renderer = new GameRenderer(game, world);
     }
 
@@ -27,16 +30,35 @@ public class GameScreen implements Screen {
         }
 
         // --- DESENHO (VIEW) ---
+        // (O GameRenderer vai cuidar da cor do fundo na próxima etapa)
         Gdx.gl.glClearColor(0.1f, 0.1f, 0.2f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         renderer.render(delta);
 
-        // --- VERIFICA GAME OVER ---
-        if (world.isGameOver()) {
+        // --- MUDANÇA: VERIFICA TRANSIÇÕES DE TELA COM FADE ---
+
+        // 1. VERIFICA SE COMPLETOU A FASE 1 (com fade do renderer)
+        if (world.isLevelComplete() && renderer.getLevelCompleteFadeAlpha() >= 0.9f) {
+            Gdx.app.log("GameScreen", "Nível " + world.getCurrentLevel() + " Completo! Mostrando tela de transição...");
+
+            // Mostrar tela de transição em vez de ir direto para próxima fase
+            TransitionScreen transitionScreen = new TransitionScreen(
+                game,
+                world.getCurrentLevel(),
+                world.getCurrentLevel() + 1,
+                world.getPontos()
+            );
+            game.setScreen(transitionScreen);
+            dispose(); // Limpa os recursos da fase atual
+            return; // Interrompe a renderização deste quadro
+        }
+
+        // 2. VERIFICA GAME OVER (com fade do renderer)
+        if (world.isGameOver() && renderer.getGameOverFadeAlpha() >= 0.9f) {
             Gdx.app.log("GameScreen", "Game Over! Pontos finais: " + world.getPontos());
             game.setScreen(new MenuScreen(game));
-            // dispose() é chamado automaticamente pela MainGame quando setScreen é usado
+            dispose(); // Limpa os recursos do jogo
         }
     }
 
@@ -85,7 +107,6 @@ public class GameScreen implements Screen {
 
     @Override
     public void hide() {
-        // Não é necessário pausar a música aqui, pois MenuScreen vai dar play
     }
 
     @Override public void pause() {

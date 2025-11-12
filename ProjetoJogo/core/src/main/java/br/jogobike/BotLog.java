@@ -13,7 +13,7 @@ public class BotLog {
     private float speedOffset;
     private Random random;
 
-    // --- MUDANÇA (Request 1): Variáveis de Fade ---
+
     private float alpha = 1.0f;
     private boolean isFadingOut = false;
     private final float FADE_SPEED = 3.0f; // ~0.33s para sumir
@@ -71,17 +71,15 @@ public class BotLog {
         Gdx.app.log("BotLog", "Criado com placeholder");
     }
 
-    /**
-     * Atualiza a lógica do Bot.
-     * @return true se o bot foi "desviado" (saiu da tela e respawnou), false caso contrário.
-     */
+
     public boolean update(float delta, float playerSpeedX, float avalancheWidth, float virtualWidth, float difficultyScalar) {
 
         // --- MUDANÇA (Request 1): Lógica de Fade Out ---
         if (isFadingOut) {
             alpha -= FADE_SPEED * delta;
             if (alpha <= 0) {
-                respawn(virtualWidth, 50, 600);
+                // CORREÇÃO: Chamamos o respawn interno, mas com os limites padrão (Fase 1)
+                // O respawn só acontece se o GameWorld chamar respawnExterno
                 isFadingOut = false;
                 alpha = 1.0f;
                 return true; // Avisa que foi desviado (respawnou)
@@ -108,15 +106,27 @@ public class BotLog {
         rect.setPosition(x + collisionOffsetX, y + collisionOffsetY);
     }
 
-    public void respawn(float virtualWidth, float minSpawnDistance, float maxSpawnDistance) {
+
+    public void respawn(float virtualWidth, float minSpawnDistance, float maxSpawnDistance, float trackBottom, float trackTop) {
         float newX = virtualWidth + MathUtils.random(minSpawnDistance, maxSpawnDistance);
-        float newY = getRandomPositionInTrack(275f, 500f);
+        // Agora usa os limites de pista passados como parâmetro
+        float newY = getRandomPositionInTrack(trackBottom, trackTop);
         this.speedOffset = MathUtils.random(MIN_SPEED_OFFSET, MAX_SPEED_OFFSET);
         updatePosition(newX, newY);
     }
 
     private float getRandomPositionInTrack(float trackBottom, float trackTop) {
-        return trackBottom + (random.nextFloat() * (trackTop - trackBottom - DEFAULT_HEIGHT));
+        // Garantindo que a parte de baixo do bot não vá abaixo de trackBottom
+        // e que a parte de cima do bot não vá acima de trackTop.
+        // O ponto de respawn (newY) é o canto inferior esquerdo do objeto (getY()).
+        float effectiveTrackTop = trackTop - DEFAULT_HEIGHT;
+
+        if (effectiveTrackTop <= trackBottom) {
+            // Caso a pista seja muito estreita, apenas centraliza ou usa o limite inferior
+            return trackBottom;
+        }
+
+        return MathUtils.random(trackBottom, effectiveTrackTop);
     }
 
     // Getters
@@ -163,7 +173,6 @@ public class BotLog {
     }
 
     public void dispose() {
-        // Não dispor textura se for a placeholder compartilhada
         if (texture != null && texture != MainGame.placeholderTexture) {
             texture.dispose();
             // --- CORREÇÃO APLICADA AQUI ---
